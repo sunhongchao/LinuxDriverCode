@@ -16,46 +16,40 @@
 #include <linux/delay.h>
 
 //static uint32_t pseudo_palette[16];
+////从设备树获取的数据
 struct spilcd_data{   
 	int dc_pin;
 	int reset_pin;
-	int cs_pin;
-	int clk_pin;
-	int rx_pin;
-	int tx_pin;
 };
 
 struct spilcd{
-	 struct spi_device *spidev;
-	 struct fb_info *fbi;
-	  struct spilcd_data *data;
-	  struct delayed_work delayed_worker;
+	 struct spi_device *spidev;//spi设备
+	 struct fb_info *fbi;//帧缓冲区
+	  struct spilcd_data *data;//从设备树获取的数据
+	  struct delayed_work delayed_worker;//延时工作队列
 };
+//全局指针，指向lcd设备
 struct spilcd  *spilcd;  
 static struct fb_ops spilcd_fb_ops = {
     .owner      = THIS_MODULE,
 };
 
-
-
 //所谓的命令实际上就是寄存器地址
 static void spilcd_WriteCmd(unsigned char cmd)
 {
-	gpio_set_value(spilcd->data->dc_pin, 0);
-
+	gpio_set_value(spilcd->data->dc_pin, 0);//命令数据线dc为低电平表示发送的是命令
     spi_write(spilcd->spidev, &cmd, 1);
-	gpio_set_value(spilcd->data->dc_pin,1);
+	gpio_set_value(spilcd->data->dc_pin,1);//命令发送完毕
 	
 }
-
 static void spilcd_WriteData(unsigned char dat)
 {
-    
-	gpio_set_value(spilcd->data->dc_pin, 1);
-	
+   
+	gpio_set_value(spilcd->data->dc_pin, 1);//命令数据线dc为高电平表示发送的是数据
     spi_write(spilcd->spidev, &dat, 1);
 	gpio_set_value(spilcd->data->dc_pin, 0);
 }
+//读取Ili9341的id，该函数没有测试成功
 void SPILcdReadID(void)  
 {  
     unsigned char rx_buf[4];  
@@ -66,6 +60,7 @@ void SPILcdReadID(void)
 	printk("id:%d %d %d %d\n",rx_buf[0],rx_buf[1],rx_buf[2],rx_buf[3]);
 	msleep(1000);
 }  
+//Lcd屏的初始化函数
 static void spilcd_init(struct spi_device *spi)
 {	
 	msleep(50);
@@ -171,13 +166,12 @@ static void spilcd_init(struct spi_device *spi)
 
 	
 } 
-
+//从设备树中提取数据dev=&spi->dev;
 static struct spilcd_data *spilcd_probe_dt(struct device *dev)
 {
 	struct spilcd_data *pdata;
-	struct device_node *node = dev->of_node;
-	
-	enum of_gpio_flags of_flags;
+	struct device_node *node = dev->of_node;//指向子节点设备树的头
+	enum of_gpio_flags of_flags;//用来获取io口的配置，是输入还是输出。
 	if (!node) {
 		printk("no  node found\n");
 		return ERR_PTR(-EINVAL);
@@ -186,17 +180,21 @@ static struct spilcd_data *spilcd_probe_dt(struct device *dev)
 	pdata = kzalloc(sizeof(struct spilcd_data), GFP_KERNEL);
 	if (!pdata)
 		return ERR_PTR(-ENOMEM);
+	//从设备树中查找dc-gpios项，如果找到就提取io口的编号和设置标志。
+	//pdata->dc_pin就是io口编号，每一个io口都有一个单独的编号。
 	if (of_find_property(node, "dc-gpios", NULL)) {
 		pdata->dc_pin= of_get_named_gpio_flags(node, "dc-gpios", 0, &of_flags);
 	}
 	if (of_find_property(node, "reset-gpios", NULL)) {
 		pdata->reset_pin= of_get_named_gpio_flags(node, "reset-gpios", 0, &of_flags);
 	}
-
+	//配置dc_pin引脚为输出引脚，并且初始化输出电平为高
 	gpio_direction_output(pdata->dc_pin, 1);
+	//配置reset_pin引脚为输出引脚，并且初始化输出电平为高.ili9431复位电平为低电平。
+	//因此最终电平应该设置为高电平。
 	gpio_direction_output(pdata->reset_pin, 1);
 	msleep(200);
-   	gpio_set_value(pdata->reset_pin,0);
+   	gpio_set_value(pdata->reset_pin,0);//复位Ili9431
 	msleep(200);
 	gpio_set_value(pdata->reset_pin,1);
 	msleep(200);
@@ -206,40 +204,37 @@ static struct spilcd_data *spilcd_probe_dt(struct device *dev)
 static struct fb_info *spilcd_fb_init(void)
 {
 	struct fb_info *fbi;
-    fbi = framebuffer_alloc(0, NULL);
+    fbi = framebuffer_alloc(0, NULL);//分配帧缓冲区
  
     strcpy(fbi->fix.id, "spilcd");
     fbi->fix.smem_len = 240*320*16/8;
-    fbi->fix.type     = FB_TYPE_PACKED_PIXELS;
-    fbi->fix.visual   = FB_VISUAL_TRUECOLOR; 
-    fbi->fix.line_length = 240*2;
+    fbi->fix.type     = FB_TYPE_PACKED_PIXELS;//像素存储类型
+    fbi->fix.visual   = FB_VISUAL_TRUECOLOR;//颜色是真彩色
+    fbi->fix.line_length = 240*2;//每行数据子节数
      
-    fbi->var.xres           = 240;
-    fbi->var.yres           = 320;
+    fbi->var.xres           = 240;//x轴分辨率
+    fbi->var.yres           = 320;//y轴分辨率
     fbi->var.xres_virtual   = 240;
     fbi->var.yres_virtual   = 320;
- 	fbi->var.bits_per_pixel = 16;
-	fbi->var.red.offset     = 11;
-    fbi->var.red.length     = 5;
+ 	fbi->var.bits_per_pixel = 16;//每个像素占的位数
+	fbi->var.red.offset     = 11; //红色在16位中起始位
+    fbi->var.red.length     = 5;//红色占用16位中几位
     fbi->var.green.offset   = 5;
     fbi->var.green.length   = 6;
     fbi->var.blue.offset    = 0;
     fbi->var.blue.length    = 5;
 	
 
-    fbi->var.activate       = FB_ACTIVATE_NOW;
-	fbi->fbops              = &spilcd_fb_ops;
+    fbi->var.activate       = FB_ACTIVATE_NOW;//设置完成立即生效
+	fbi->fbops              = &spilcd_fb_ops;//自定义的操作fb的函数
 	//fbi->pseudo_palette = pseudo_palette;
-    fbi->screen_size   = 240*320*16/8;  
-	
+    fbi->screen_size   = 240*320*16/8;  //一帧颜色数据占用的子节数
+	//申请帧缓冲区，采用	DMA模式
    fbi->screen_base = dma_alloc_writecombine(NULL,fbi->fix.smem_len, (dma_addr_t *)&fbi->fix.smem_start, GFP_KERNEL);
- 
-    register_framebuffer(fbi);
-     
-     
- 
+    register_framebuffer(fbi);//注册帧缓冲区
 	return fbi;
 }
+//显示测试函数，最终代码不适用该函数，直接向lcd发数据，没有采用framebuffer
 void show_fb_test(void)
 {
   	int x, y;
@@ -248,13 +243,13 @@ void show_fb_test(void)
     u16 color2 = 0x07e0; // green
     u16 color3 = 0xffff; // white
     u16 color;
-    spilcd_WriteCmd(0x2A); 
+    spilcd_WriteCmd(0x2A); //设置写显存x轴起始坐标
 	spilcd_WriteData(0);
 	spilcd_WriteData(0); 			 
-	spilcd_WriteCmd(0X2B); 
+	spilcd_WriteCmd(0X2B); //设置写显存y轴起始坐标
 	spilcd_WriteData(0);
 	spilcd_WriteData(0);
-	spilcd_WriteCmd(0X2C);
+	spilcd_WriteCmd(0X2C);//开始写显存，数据会从（x,y）所在的显存开始存储数据
    for (y = 0; y < 320; y++)
     {
         for (x = 0; x < 240; x++)
@@ -270,6 +265,8 @@ void show_fb_test(void)
     }
 		 
 }
+//设置缓冲区数据，测试framebuffer工作是否正常。显示屏会依次全屏显示蓝色，红色，绿色，白色
+//最终代码不使用该函数
 void set_fbdata(void)
 {
 	u16 *buf;
@@ -300,6 +297,7 @@ void set_fbdata(void)
     }
 	//printk("current color%d\n",color);
 }
+//显示函数
 void show_fb(struct fb_info *fbi, struct spi_device *spi)
 {
   
@@ -310,36 +308,40 @@ void show_fb(struct fb_info *fbi, struct spi_device *spi)
 	u8 tmp;
 	u32 i;
 	printk("delayed_work show\n");	
-	buf= (u8*)(fbi->screen_base);//内存基地址
-	len=fbi->fix.smem_len;
+	buf= (u8*)(fbi->screen_base);//缓存基地址
+	len=fbi->fix.smem_len;//缓存长度
 	printk("len:%d,buf:%p\n",len,buf);
+	/*
+	由于默认的缓存中颜色数据是低字节在前，高子节在后。而spi lcd屏幕只能一位一位的发送。而且要求高位
+	在前。为了使用DMA模式，一次把所有数据都传送给spi控制器。把高低字节交换。交换后高字节在前。
+	而spi发送时会自动首先发送高位数据。
+	*/
 	for(i=0;i<len;i=i+2) 
 	{
 		tmp=buf[i];
 		buf[i]=buf[i+1];
 		buf[i+1]=tmp;
-		
 	}
 	printk("color:%d\n ",(u16)(buf[i]<<8|buf[i+1]));
-	spilcd_WriteCmd(0x2A); 
+	spilcd_WriteCmd(0x2A); //设置x轴数据起始位置
 	spilcd_WriteData(0);
 	spilcd_WriteData(0); 			 
-	spilcd_WriteCmd(0X2B); 
+	spilcd_WriteCmd(0X2B);  //设置y轴数据起始位置
 	spilcd_WriteData(0);
 	spilcd_WriteData(0);
-	spilcd_WriteCmd(0X2C);
-	gpio_set_value(spilcd->data->dc_pin, 1);
+	spilcd_WriteCmd(0X2C);//指示开始发送颜色数据，接收到数据存储在（x,y）坐标映射的显存位置
+	gpio_set_value(spilcd->data->dc_pin, 1);//高电平指示发送数据
    	spi_write(spilcd->spidev,(u8*)buf,len);
 	gpio_set_value(spilcd->data->dc_pin, 0);
 	
    
 
 }
-
+//延时工作队列函数，定时时间到执行该函数
 static void delayed_work_handler(struct work_struct *work)
 {
 	   //set_fbdata();
-	   show_fb(spilcd->fbi,spilcd->spidev);
+	   show_fb(spilcd->fbi,spilcd->spidev);//发送颜色数据到显示屏
 	   schedule_delayed_work(&spilcd->delayed_worker,HZ/30);//HZ/100*100);//每隔30ms刷一次屏幕
 }
 static int  spi_lcd_probe(struct spi_device *spi)
@@ -349,7 +351,7 @@ static int  spi_lcd_probe(struct spi_device *spi)
 	struct device *dev;
 	printk("probed lcd device node\n");
 	dev=&spi->dev;
-	pdata = dev->platform_data; 
+	pdata = dev->platform_data; //是否有平台数据，设备初始化注册
 	if (!pdata) {
 		pdata=spilcd_probe_dt(dev);//从设备树获取数据信息
 		if (IS_ERR(pdata))
@@ -368,13 +370,16 @@ static int  spi_lcd_probe(struct spi_device *spi)
 		}
 	spilcd->spidev=spi;
 	spilcd->data=pdata; 
-	spilcd_init(spi);
+	spilcd_init(spi);//初始化lcd屏
 	//show_fb_test();
 	printk("dc pin is %d\n",pdata->dc_pin);
-	fbi=spilcd_fb_init();
+	fbi=spilcd_fb_init();//申请并注册帧缓冲区
 	spilcd->fbi=fbi;
-	
+	//初始化延时工作队列
 	INIT_DELAYED_WORK(&spilcd->delayed_worker,delayed_work_handler);
+	//启动工作队列。延时是以jiffes计数单位，HZ=100就是1S中断100次，每次10ms，
+	//即1 jiffes=10ms,设置值HZ/100*100=100*jiffes=100*10ms=1s
+	//延时工作队列就是每隔一段时间执行一次队列函数delayed_work_handler
 	schedule_delayed_work(&spilcd->delayed_worker,HZ/100*100);
 error:
     return 0;
@@ -387,14 +392,16 @@ static int  spi_lcd_remove(struct spi_device *spi)
 	printk("spilcd:%p",spilcd);
 	 fbi= spilcd->fbi;
 	cancel_delayed_work_sync(&spilcd->delayed_worker);//等待本次任务完成后再取消等待队列
-	unregister_framebuffer(fbi);
+	unregister_framebuffer(fbi);//卸载注册的帧缓冲区
+	//释放DMA申请的缓冲区
 	dma_free_writecombine(NULL, fbi->fix.smem_len, fbi->screen_base, fbi->fix.smem_start);
-	framebuffer_release(fbi);
+	framebuffer_release(fbi);//释放帧缓冲区
 	kfree(spilcd->data);
 	kfree(spilcd);
 	return 0;
 }
 
+//设备树中compatible名字一样则匹配调用probe函数
 
 static const struct of_device_id dt_ids[] = {							   
 	{ .compatible = "ilitek,ili9341", },									   
