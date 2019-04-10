@@ -42,4 +42,56 @@ Status StrEmpty(String S)
 	else 
 		return FALSE;
 }
-
+/*
+初始条件：串S和T存在
+操作结果：若S>T,则返回值>0;若S=T,则返回值=0；若S<T,则返回值<0
+*/
+int StrCompare(String S,String T)
+{
+	int i;
+	for(i=1;i<=S[0]&&i<=T[0];i++)
+		if(S[i]!=T[i])
+			return S[i]-T[i];
+	return S[0]-T[0];
+}
+/*
+返回串的字符个数
+*/
+int StrLength(String S)
+{
+	return S[0];
+}
+/*
+初始条件：串S存在，操作结果：将S清为空串
+*/
+Status ClearString(String S)
+{
+	S[0]=0;
+	return OK;
+}
+/*
+用T返回S1和S2连接而成的新串。若未截断，则返回TRUE,否则FALSE
+*/
+Status Concat(String T,String S1,String S2)
+{
+	int i;
+	if(S1[0]+S2[0]<=MAXSIZE)
+	{//未截断
+		for(i=1;i<=S1[0];i++)
+			T[i]=S1[i];
+		for(i=1;i<=S2[0];i++)
+			T[S1[0]+i]=S2[i];
+		T[0]=S1[0]+S2[0];
+		return TRUE;
+	}
+	else 
+	{
+		for(i=1;i<=S1[0];i++)
+			T[i]=S1[i];
+		for(i=1;i<=MAXSIZE-S1[0];i++)
+			T[S1[0]+i]=S2[i];
+		T[0]=MAXSIZE;
+		return FALSE;
+	}
+}
+/**/
