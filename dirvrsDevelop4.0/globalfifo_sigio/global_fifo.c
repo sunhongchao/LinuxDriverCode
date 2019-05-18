@@ -10,6 +10,7 @@
 #include <asm/io.h>
 #include <asm/system.h>
 #include <asm/uaccess.h>
+#include <linux/platform_device.h>
 
 #define GLOBALFIFO_SIZE 0x1000 /*全局内存最大4KB*/
 #define MEM_CLEAR 0x1  /*清零全局内存*/

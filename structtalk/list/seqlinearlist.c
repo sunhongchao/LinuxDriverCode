@@ -23,9 +23,9 @@ typedef struct
 	int length;
 }SqList;
 //初始化操作，建立一个空的线性表L
-Status InitList(SqList *L)
+Status InitList(SqList *p)
 {
-	L->length=0;
+	p->length=0;
 	return OK;
 }
 //判断线性表是否为空，空返回人true，非空返回fasle
