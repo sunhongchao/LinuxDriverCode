@@ -1,4 +1,3 @@
-
 #include <linux/kernel.h>
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
@@ -11,8 +10,8 @@
 #include <linux/of.h>
 #include <linux/of_gpio.h>
 #include <linux/of_platform.h>  
-#define FT6236_MAX_TOUCH_POINTS		2
 
+#define FT6236_MAX_TOUCH_POINTS		2
 #define FT6236_REG_TH_GROUP		0x80
 #define FT6236_REG_PERIODACTIVE		0x88
 #define FT6236_REG_LIB_VER_H		0xa1
@@ -32,14 +31,13 @@ struct ft6236_data {
 	struct input_dev *input;
 	int reset_pin;
 	int irq_pin;
-	
 	u32 max_x;
 	u32 max_y;
 	bool invert_x;
 	bool invert_y;
 	bool swap_xy;
+	
 };
-
 
 struct ft6236_touchpoint {
 	union {
@@ -55,7 +53,10 @@ struct ft6236_touchpoint {
 	u8 weight;
 	u8 misc;
 } __packed;
-
+struct  point_pos{
+	int x;
+	int y;
+};
 /* This packet represents the register map as read from offset 0 */
 struct ft6236_packet {
 	u8 dev_mode;
@@ -88,6 +89,7 @@ static int ft6236_read(struct i2c_client *client, u8 reg, u8 len, void *data)
 	return 0;
 }
 
+
 static irqreturn_t ft6236_interrupt(int irq, void *dev_id)
 {
 	struct ft6236_data *ft6236 = dev_id;
@@ -95,19 +97,42 @@ static irqreturn_t ft6236_interrupt(int irq, void *dev_id)
 	struct input_dev *input = ft6236->input;
 	struct ft6236_packet buf;
 	u8 touches;
+	static int times;
 	int i, error;
+	static int pre_x[2],pre_xx[2],pre_y[2],pre_yy[2];
+	int now_x[2],now_y[2];
+	if((ft6236 == NULL)||(dev == NULL)|| (input == NULL)){
+		printk("error:ft6236 = NULL\n");
+		//msleep(100);
+	}
+	
 	error = ft6236_read(ft6236->client, 0, sizeof(buf), &buf);
 	if (error) {
 		dev_err(dev, "read touchdata failed %d\n", error);
 		return IRQ_HANDLED;
 	}
-
 	touches = buf.touches & 0xf;
-	if (touches > FT6236_MAX_TOUCH_POINTS) {
+	if(touches > FT6236_MAX_TOUCH_POINTS) {
 		dev_dbg(dev,
 			"%d touch points reported, only %d are supported\n",
 			touches, FT6236_MAX_TOUCH_POINTS);
 		touches = FT6236_MAX_TOUCH_POINTS;
+	}else if(touches <= 0){
+		for (i = 0; i < FT6236_MAX_TOUCH_POINTS; i++) {
+			pre_xx[i] = 0;
+			pre_yy[i] = 0;
+ 			pre_x[i] = 0;
+			pre_y[i] = 0;
+		}
+		if(times > 3){
+			printk(" usual touch key up\n");
+			input_mt_sync_frame(input);
+			input_sync(input);
+		}else {
+			printk("unusual touch key up\n");
+		}
+		times = 0;
+		return IRQ_HANDLED;
 	}
 
 	for (i = 0; i < touches; i++) {
@@ -123,24 +148,46 @@ static irqreturn_t ft6236_interrupt(int irq, void *dev_id)
 		input_mt_report_slot_state(input, MT_TOOL_FINGER, act);
 		if (!act)
 			continue;
-		
+		times++;
+		ft6236->invert_x=1;
 		if (ft6236->invert_x)
 			x = ft6236->max_x - x;
-		ft6236->invert_y=1;
+
 		if (ft6236->invert_y)
 			y = ft6236->max_y - y;
+
 		ft6236->swap_xy=1;
-		if (ft6236->swap_xy) {
-			input_report_abs(input, ABS_MT_POSITION_X, y);
-			input_report_abs(input, ABS_MT_POSITION_Y, x);
-			printk("x:%d,y:%d\n",y,x);
-		} else {
-			input_report_abs(input, ABS_MT_POSITION_X, x);
-			input_report_abs(input, ABS_MT_POSITION_Y, y);
+		if (ft6236->swap_xy){
+			now_x[i]=y;
+			now_y[i]=x;
+		}else {
+			now_x[i]=x;
+			now_y[i]=y;
+		}
+	   printk("id:%d pos:%d,%d\n",i,now_x[i],now_y[i]);
+		if((pre_x[i] == 0) && (pre_y[i] == 0)){
+			pre_x[i]=now_x[i];
+			pre_y[i]=now_y[i];
+			continue;
+		
+		} else if((abs(pre_x[i]-now_x[i]) > 8) || ((pre_y[i]-now_y[i]) > 8)){
+			pre_x[i]=0; 
+			pre_y[i]=0;
+			continue;
 			
 		}
+		if((pre_xx[i] != 0) && ((pre_yy[i] != 0))) { 
+			input_report_abs(input, ABS_MT_POSITION_X, now_x[i]);
+			input_report_abs(input, ABS_MT_POSITION_Y, now_y[i]);
+			
+		}
+	
+		pre_xx[i] =  pre_x[i];
+		pre_yy[i] =  pre_y[i];
+		pre_x[i]  =  now_x[i];
+		pre_y[i]  =  now_y[i];
+		
 	}
-
 	input_mt_sync_frame(input);
 	input_sync(input);
 
@@ -170,8 +217,6 @@ static void ft6236_parse_devtree(struct ft6236_data *ft6236)
 	msleep(200);
 	gpio_set_value(ft6236->reset_pin,1);
 	msleep(200);
-
-
 
 }
 static int mtp_ft5x0x_i2c_rxdata(struct i2c_client *client, char *rxdata, int length) {
@@ -281,10 +326,12 @@ static int ft6236_probe(struct i2c_client *client,
 		dev_err(dev, "failed to register input device: %d\n", error);
 		return error;
 	}
+	
 	return 0;
 }
 static int  ft6236_remove(struct i2c_client *client)
 {    
+	
     return 0;
 }
 
