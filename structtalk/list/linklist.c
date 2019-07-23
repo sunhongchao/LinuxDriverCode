@@ -110,7 +110,7 @@ Status GetElem(LinkList L,int i,ElemType *e)
 {
 	int j;
 	LinkList p;
-	p=L->next;
+	p=L->next;//指向第一个结点
 	j=1;
 	while(p&&j<i)
 	{
@@ -144,19 +144,19 @@ Status ListInsert(LinkList *L,int i,ElemType e)//此处的L依然不是链表L�
 {
 	int j;
 	LinkList p,s;
-	p=*L;//此时p相当于
+	p=*L;//此时p相当于指向第一个结点的地址，即头结点指针
 	j=1;
-	while(p&&j<1)
+	while(p && j<i)
 	{
-		p=p->next;
+		p = p->next;
 		++j;
 	}
-	if(!p||j>i)
+	if(!p || j > i)
 		return ERROR;
-	s=(LinkList)malloc(sizeof(Node));//
-	s->data=e;
-	s->next=p->next;
-	p->next=s;
+	s = (LinkList)malloc(sizeof(Node));//
+	s->data = e;
+	s->next = p->next;
+	p->next = s;
 	return OK;
 }
 /*初始条件：顺序线性表L已存在，1<=i<=ListLength(L)
@@ -186,7 +186,7 @@ Status ListDelete(LinkList *L,int i,ElemType *e)
 */
 Status ListTraverse(LinkList L)
 {
-	LinkList p=L->next;
+	LinkList p=L->next;//指向第一个结点
 	while(p)
 	{
 		visit(p->data);
@@ -232,7 +232,7 @@ void CreateListTail(LinkList *L,int n)
 }
 int main()
 {
-	LinkList L;//L是头指针，L指向头结点
+	LinkList L;//L是头指针，L指向头结点，头结点并非第一个结点，是为了方便操作加入的，数据项可以存储链表长度，指针项指向第一个结点。
 	ElemType e;
 	Status i;
 	int j,k;

@@ -10,7 +10,7 @@
 #define MAXSIZE 20
 
 typedef int Status;
-typedef int ElemType; 
+typedef int ElemType; //元素类型为整型
 
 Status visit(ElemType c)
 {
@@ -74,7 +74,7 @@ int LocateElem(SqList L,ElemType e)
 /*
 初始条件：顺序线性表已存在，1<=i<=ListLength(L)
 操作结果：在L中第i个位置之前插入新的数据元素e,L的长度
-加1
+加1，i=1表示插入到表头
 */
 Status ListInsert(SqList *L,int i,ElemType e)
 {
