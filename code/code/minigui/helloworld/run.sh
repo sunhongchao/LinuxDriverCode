@@ -1,0 +1,1 @@
+arm-rockchip-linux-gnueabihf-gcc -o helloworld helloworld.c -I/home/chao/minigui/build/include/ -L/home/chao/minigui/build/lib -lminigui_ths -ljpeg -lm -lpthread -ldl -lpng -L/home/chao/rk3308_linux/buildroot/output/rockchip_rk3308_32_debug/target/usr/lib -lts
